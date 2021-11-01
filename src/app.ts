@@ -1,7 +1,7 @@
 import express from "express";
 import dataDogs, { Doggo } from "./data/dogs";
 import { Request } from "express";
-import addDoggo from "./db";
+import { addDoggo, updateDoggo } from "./db";
 
 type DogRequest = Request<{ id: string }, any, Doggo>;
 
@@ -36,7 +36,7 @@ app.get("/dogs/:id", (req, res) => {
 /**
 @add_another_doggo
 */
-app.post("/dogs", (req: DogRequest, res) => {
+app.post("/dogs", async (req: DogRequest, res) => {
   if (!req.body.age || !req.body.name)
     return res.status(400).send("Name or age aren't present");
 
@@ -46,23 +46,19 @@ app.post("/dogs", (req: DogRequest, res) => {
   if (typeof req.body.age !== "number")
     return res.status(400).send("Wrong type for age");
 
-  const lastDogId = Math.max(...dogs.map((doggo) => doggo.id));
 
-  const newId = dogs.length ? lastDogId + 1 : 1;
 
-  console.log({ lastDogId, newId });
-  const newDog: Doggo = {
+  const newDog: Omit<Doggo, 'id'> = {
     age: req.body.age,
     name: req.body.name,
-    id: newId,
   };
 
   if (req.body.hasOwner) newDog.hasOwner = req.body.hasOwner;
   if (req.body.size) newDog.size = req.body.size;
 
-  dogs = [...dogs, newDog];
+  const callback = (newItem) => res.send(newItem);
 
-  return res.send(dogs);
+  addDoggo(newDog, callback);
 });
 /**
 @update_doge
