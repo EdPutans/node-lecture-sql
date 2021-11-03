@@ -47,7 +47,6 @@ app.post("/dogs", async (req: DogRequest, res) => {
     return res.status(400).send("Wrong type for age");
 
 
-
   const newDog: Omit<Doggo, 'id'> = {
     age: req.body.age,
     name: req.body.name,
@@ -56,24 +55,14 @@ app.post("/dogs", async (req: DogRequest, res) => {
   if (req.body.hasOwner) newDog.hasOwner = req.body.hasOwner;
   if (req.body.size) newDog.size = req.body.size;
 
-  const callback = (newItem) => res.send(newItem);
-
-  addDoggo(newDog, callback);
+  const newlyCreatedDog = addDoggo(newDog);
+  res.send(newlyCreatedDog)
 });
-/**
-@update_doge
-*/
+
 app.patch("/dogs/:id", (req: DogRequest, res) => {
-  const doggoIndex = dogs.findIndex(
-    (pupper) => pupper.id.toString() === req.params.id
-  );
+  const result = updateDoggo(req.params.id, req.body);
 
-  if (doggoIndex === -1) return res.status(404).send("404: Dog not found");
-
-  const updatedDog = { ...dogs[doggoIndex], ...req.body };
-  dogs[doggoIndex] = updatedDog;
-
-  res.send(dogs);
+  res.send(result);
 });
 
 /**
@@ -84,7 +73,6 @@ app.delete("/dogs/:id", (req: DogRequest, res) => {
 
   res.status(204).send();
 });
-
 
 app.listen(port, (): void => {
   // either the types mismatch or err doesnt exist?

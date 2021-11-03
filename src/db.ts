@@ -1,67 +1,74 @@
-import path from "path";
 import { Doggo } from "./data/dogs";
-import { Database, RunResult, sqlite3, Statement } from 'sqlite3'
+import path from 'path';
+import Database from 'better-sqlite3';
 
-type DoggoCallback = (response: { row: Doggo, err: Error | null }) => void
+const db = new Database(path.resolve(__dirname, 'db/doggos.db'), { verbose: console.log })
 
-const doggoDatabasePath = path.resolve(__dirname, './db/doggos.db')
+const init = db.prepare(`CREATE TABLE IF NOT EXISTS doggos (
+    name text NOT NULL,
+    age integer NOT NULL,
+    hasOwner integer,
+    size text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT
+);`);
 
-const sqlite3 = require('sqlite3').verbose();
+init.run()
 
-let db: Database = new sqlite3.Database(doggoDatabasePath, sqlite3.OPEN_READWRITE, (err) => {
-    if (err) {
-        console.error(err.message);
-    } else {
-        console.log('Connected to the doggos database.');
+const getByIdQuery = db.prepare(`SELECT * FROM doggos WHERE id=?`)
+const insertQuery = db.prepare(`INSERT INTO doggos (name, age, size, hasOwner) VALUES (?,?,?,?);`);
+const updateQuery = db.prepare(`UPDATE doggos SET name=?, age=?, size=?, hasOwner=? WHERE id=?;`);
+const deleteQuery = db.prepare(`DELETE FROM doggos WHERE id=?;`);
+
+export const addDoggo = (dog: Omit<Doggo, 'id'>) => {
+    try {
+        const { name, age, size, hasOwner } = dog;
+
+        const { lastInsertRowid } = insertQuery.run(name, age, size, hasOwner);
+        const lastItem = getByIdQuery.get(lastInsertRowid)
+
+        return lastItem
+    } catch (error) {
+        console.log({ error })
+        return { error }
     }
-});
 
-// @init
-db.run(`CREATE TABLE IF NOT EXISTS doggos (
-        name text NOT NULL,
-        age integer NOT NULL,
-        hasOwner integer,
-        size text,
-        id INTEGER PRIMARY KEY AUTOINCREMENT
-    );`);
+}
 
+export const updateDoggo = (id, dogParams: Partial<Doggo>) => {
+    try {
+        const existingDog = getByIdQuery.get(id);
 
-const insertSQL = `INSERT INTO doggos (name, age, size, hasOwner ) VALUES (?,?,?,?);`
-
-
-export const addDoggo = (dog: Omit<Doggo, 'id'>, callback: DoggoCallback) => {
-    const { name, age, size, hasOwner } = dog;
-
-    db.serialize(() => {
-        db.run(
-            insertSQL,
-            [name, age, size, hasOwner],
-            function (this: RunResult, error) {
-                if (error) return { error };
-
-                db.get(`SELECT * FROM Doggos ORDER BY id DESC LIMIT 1;`, (err, row) => {
-                    callback({ row, err })
-                })
-            }
+        updateQuery.run(
+            dogParams.name ?? existingDog.name,
+            dogParams.age ?? existingDog.age,
+            dogParams.hasOwner ?? existingDog.hasOwner,
+            dogParams.size ?? existingDog.size,
+            id
         );
 
-    })
+        const updatedDog = getByIdQuery.get(id);
+
+        console.log({ updatedDog })
+        return updatedDog;
+    } catch (error) {
+        console.log({ error })
+        return { error }
+    }
 }
 
-export const updateDoggo = (id, dog: Omit<Doggo, 'id'>) => {
-    const { name, age, hasOwner, size } = dog;
 
-
-    db.run(`UPDATE Doggos 
-        SET name = ?, age = ?, hasOwner = ?, size = ?
-        WHERE id = ${id};`, [name, age, hasOwner ? 1 : 0, size], err => {
-        if (err) return err;
-        console.log('Successfully updated dog:', { ...dog, id })
-    });
+export const deleteDoggo = (id) => {
+    try {
+        deleteQuery.run(id)
+        return "All good";
+    } catch (error) {
+        console.log(error)
+        return { error }
+    }
 }
 
-// addDoggo({ name: '0', age: 0, hasOwner: false, size: 'big' })
-// updateDoggo(1, { name: '0', age: 0, hasOwner: false, size: 'big' })
-
-
-export default addDoggo;
+//@ts-ignore
+addDoggo({ name: '2', age: undefined })
+updateDoggo(1, { name: 'ANANA', size: 'small', age: 2 })
+updateDoggo(1, { name: 'ANANA', size: undefined, age: 3 })
+deleteDoggo(1)
