@@ -1,7 +1,19 @@
 import express from "express";
-import dataDogs, { Doggo } from "./data/dogs";
+import { Doggo } from "./data/dogs";
 import { Request } from "express";
-import { addDoggo, updateDoggo } from "./db";
+
+import Database from 'better-sqlite3';
+
+const db = new Database('doggos.db', { verbose: console.log });
+
+const init = db.prepare(`CREATE TABLE IF NOT EXISTS doggos (
+    name text NOT NULL,
+    age integer NOT NULL,
+    hasOwner integer,
+    size text,
+    id INTEGER PRIMARY KEY AUTOINCREMENT
+);`);
+init.run()
 
 type DogRequest = Request<{ id: string }, any, Doggo>;
 
@@ -10,68 +22,54 @@ app.use(express.json());
 
 const port = 3000;
 
-
-let dogs = [...dataDogs];
-
-/**
-@get_all_doggos
-*/
+const getAllStatement = db.prepare(`SELECT * FROM doggos;`);
 app.get("/dogs/", (req, res) => {
+  const dogs = getAllStatement.get();
+
   res.send(dogs);
 });
-/**
-@get_single_pupper
-*/
+
+const getDogStatement = db.prepare(`SELECT * FROM doggos WHERE id=?;`)
+
 app.get("/dogs/:id", (req, res) => {
-  const doggo = dogs.find(
-    (item) => item.id.toString() === req.params.id.toString()
+  const doggo = getDogStatement.get(req.params.id);
+
+  res.send(doggo);
+});
+
+const insertStatement = db.prepare(`INSERT INTO doggos (name, age, size, hasOwner) VALUES (?,?,?,?);`);
+app.post("/dogs", async (req: DogRequest, res) => {
+
+  const { name, age, size, hasOwner } = req.body;
+  const { lastInsertRowid } = insertStatement.run(name, age, size, hasOwner);
+  const lastInsertedDog = getDogStatement.get(lastInsertRowid);
+
+  res.send(lastInsertedDog);
+});
+
+const updateStatement = db.prepare(`UPDATE doggos SET name=?, age=?, size=?, hasOwner=? WHERE id=?;`);
+app.patch("/dogs/:id", (req: DogRequest, res) => {
+  const { name, age, hasOwner, size } = req.body;
+  const existingDog = getDogStatement.get(req.params.id);
+
+  updateStatement.run(
+    name ?? existingDog.name,
+    age ?? existingDog.age,
+    size ?? existingDog.size,
+    hasOwner ?? existingDog.hasOwner,
+    req.params.id
   );
 
-  if (!doggo) return res.status(404).send("404: Dog not found");
+  const updatedDog = getDogStatement.get(req.params.id);
 
-  console.log(`Someone is interested in ${doggo.name}!`);
-  return res.send(doggo);
+  res.send(updatedDog);
 });
 
-/**
-@add_another_doggo
-*/
-app.post("/dogs", async (req: DogRequest, res) => {
-  if (!req.body.age || !req.body.name)
-    return res.status(400).send("Name or age aren't present");
+const deleteStatement = db.prepare(`DELETE FROM doggos WHERE id=?;`);
 
-  if (typeof req.body.name !== "string")
-    return res.status(400).send("Name must be a string");
-
-  if (typeof req.body.age !== "number")
-    return res.status(400).send("Wrong type for age");
-
-
-  const newDog: Omit<Doggo, 'id'> = {
-    age: req.body.age,
-    name: req.body.name,
-  };
-
-  if (req.body.hasOwner) newDog.hasOwner = req.body.hasOwner;
-  if (req.body.size) newDog.size = req.body.size;
-
-  const newlyCreatedDog = addDoggo(newDog);
-  res.send(newlyCreatedDog)
-});
-
-app.patch("/dogs/:id", (req: DogRequest, res) => {
-  const result = updateDoggo(req.params.id, req.body);
-
-  res.send(result);
-});
-
-/**
-@murder_animal
-*/
 app.delete("/dogs/:id", (req: DogRequest, res) => {
-  dogs = dogs.filter((doggo) => doggo.id.toString() !== req.params.id);
-
-  res.status(204).send();
+  deleteStatement.run(req.params.id)
+  res.send({ message: "Dog successfully deleted lol" })
 });
 
 app.listen(port, (): void => {
